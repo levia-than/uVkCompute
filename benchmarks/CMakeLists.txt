@@ -13,6 +13,7 @@
 # limitations under the License.
 
 add_subdirectory(argmax)
+add_subdirectory(branch)
 add_subdirectory(compute)
 add_subdirectory(convolution)
 add_subdirectory(matmul)
