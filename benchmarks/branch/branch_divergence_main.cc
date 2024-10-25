@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <vulkan/vulkan_core.h>
 #include <chrono>
 #include <memory>
 #include <numeric>
@@ -248,6 +249,12 @@ void RegisterVulkanBenchmarks(
   const char *gpu_name = physical_device.v10_properties.deviceName;
 
   const size_t num_element = 1;
+  VkPhysicalDeviceProperties deviceProperties;
+  vkGetPhysicalDeviceProperties(physical_device.handle, &deviceProperties);
+  if (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+    std::cout << "GPU ENABLED" << std::endl;
+  else 
+    std::cout << "GPU NOT ENABLED" << std::endl;
   for (const auto &shader : kShaders) {
     std::string test_name = absl::StrCat(gpu_name, "/", shader.name);
     ::benchmark::RegisterBenchmark(test_name.c_str(), BranchDivergence, device,
