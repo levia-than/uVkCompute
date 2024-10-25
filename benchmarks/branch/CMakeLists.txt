@@ -7,6 +7,24 @@ uvkc_glsl_shader_instance(
     "--target-env=vulkan1.1"
 )
 
+uvkc_glsl_shader_instance(
+  NAME
+    no_divergence_shader
+  SRC
+    "no_divergence.glsl"
+  GLSLC_ARGS
+    "--target-env=vulkan1.1"
+)
+
+uvkc_glsl_shader_instance(
+  NAME
+    divergence_with_cpu_remapping_shader
+  SRC
+    "divergence_with_cpu_remapping.glsl"
+  GLSLC_ARGS
+    "--target-env=vulkan1.1"
+)
+
 uvkc_cc_binary(
   NAME
     branch_divergence 
@@ -14,6 +32,8 @@ uvkc_cc_binary(
     "branch_divergence_main.cc"
   DEPS
     ::branch_divergence_shader
+    ::no_divergence_shader
+    ::divergence_with_cpu_remapping_shader
     benchmark::benchmark
     uvkc::benchmark::core
     uvkc::benchmark::main

@@ -7,20 +7,19 @@ layout (local_size_x = 256) in;
 
 layout (set = 0, binding = 1) buffer Input {
     float input_array[]; 
-} inputA;
+};
 
 layout (set = 0, binding = 0) buffer Output {
     float results[];
-} outputA;
+};
 
 void main() {
-	uint index = gl_GlobalInvocationID.x;
+  uint index = gl_GlobalInvocationID.x;
+  float cond = input_array[index];
+  results[index] = 0;
+  float op = results[index]; 
 
-  float cond = inputA.input_array[index];
-	outputA.results[index] = 0;
-  float op = outputA.results[index]; 
-
-  if ( cond >= 15) {
+  if ( cond >= -12) {
     op = (op + 15.f);
     op = (op * op);
     op = ((op * 2.f) - 225.f);
@@ -30,5 +29,5 @@ void main() {
     op = (op * (op - 15.f));
   }
 
-  outputA.results[index] = op;
+  results[index] = op;
 }

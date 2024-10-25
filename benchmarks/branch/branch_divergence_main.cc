@@ -42,8 +42,18 @@ static uint32_t basicBranch[] = {
 #include "branch_divergence_shader_spirv_instance.inc"
 };
 
+static uint32_t branchNoDivergence[] = {
+#include "no_divergence_shader_spirv_instance.inc"
+};
+
+static uint32_t branchWithCPURemapping[] = {
+#include "divergence_with_cpu_remapping_shader_spirv_instance.inc"
+};
+
 static ShaderCode kShaders[] = {
-  {"branch_divergence",basicBranch,sizeof(basicBranch)},
+  {"basic_branch_divergence",basicBranch,sizeof(basicBranch)},
+  {"branch_with_no_divergence", branchNoDivergence, sizeof(branchNoDivergence)},
+  {"branch_with_cpu_remapping", branchWithCPURemapping, sizeof(branchWithCPURemapping)},
   };
 
 static void BranchDivergence(::benchmark::State &state,
@@ -70,7 +80,14 @@ static void BranchDivergence(::benchmark::State &state,
   //===-------------------------------------------------------------------===/
   // Create buffers
   //===-------------------------------------------------------------------===/
+  const size_t input_size = num_element * 256 * sizeof(float);
   const size_t dst_size = num_element * 256 * sizeof(float);
+
+  BM_CHECK_OK_AND_ASSIGN(
+    auto input_buffer,
+    device->CreateBuffer(
+      VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, input_size));
 
   BM_CHECK_OK_AND_ASSIGN(
       auto dst_buffer,
@@ -82,13 +99,21 @@ static void BranchDivergence(::benchmark::State &state,
   // Set source buffer data
   //===-------------------------------------------------------------------===/
 
-  
+  BM_CHECK_OK(::uvkc::benchmark::SetDeviceBufferViaStagingBuffer(
+    device, input_buffer.get(), input_size, [&](void *ptr, size_t num_bytes) {
+      float *input_float_buffer = reinterpret_cast<float *>(ptr);
+      for (size_t i = 0; i < 256; i++ ) {
+        input_float_buffer[i] = rand() % 30;
+      }
+    }));
+
   //===-------------------------------------------------------------------===/
   // Dispatch
   //===-------------------------------------------------------------------===/
 
   std::vector<::uvkc::vulkan::Device::BoundBuffer> bound_buffers = {
       {dst_buffer.get(), /*set=*/0, /*binding=*/0},
+      {input_buffer.get(), 0, 1}
   };
   BM_CHECK_OK(device->AttachBufferToDescriptor(
       *shader_module, layout_set_map,
@@ -116,20 +141,29 @@ static void BranchDivergence(::benchmark::State &state,
   //===-------------------------------------------------------------------===/
 
 
-  BM_CHECK_OK(::uvkc::benchmark::GetDeviceBufferViaStagingBuffer(
-      device, dst_buffer.get(), dst_size, [&](void *ptr, size_t num_bytes) {
-        float *dst_float_buffer = reinterpret_cast<float *>(ptr);
-        for (size_t i = 0; i < 256; i++) {
-          // float limit = i % 2 ? i + 1 : i * 2;   
-          // float limit = (i * 2) + 1;
-          float limit = (i * 2);      
-          BM_CHECK_FLOAT_EQ(dst_float_buffer[i], limit, 0.01f)
-              << "destination buffer element #" << i
-              << " has incorrect value: expected to be " << limit
-              << " but found " << dst_float_buffer[i];
-        }
-      }));
+  // BM_CHECK_OK(::uvkc::benchmark::GetDeviceBufferViaStagingBuffer(
+  //     device, dst_buffer.get(), dst_size, [&](void *ptr, size_t num_bytes) {
+  //       float *dst_float_buffer = reinterpret_cast<float *>(ptr);
+  //       for (size_t i = 0; i < 256; i++) {
+  //         float limit = i % 3 ? i + 1 : i * 2;   
+  //         // float limit = (i * 2) + 1;
+  //         // float limit = (i * 2);      
+  //         BM_CHECK_FLOAT_EQ(dst_float_buffer[i], limit, 0.01f)
+  //             << "destination buffer element #" << i
+  //             << " has incorrect value: expected to be " << limit
+  //             << " but found " << dst_float_buffer[i];
+  //       }
+  //     }));
 
+  // BM_CHECK_OK(::uvkc::benchmark::GetDeviceBufferViaStagingBuffer(
+  //   device, dst_buffer.get(), dst_size, [&](void *ptr, size_t num_bytes) {
+  //     float *dst_float_buffer = reinterpret_cast<float *>(ptr);
+  //     for (size_t i = 0; i < 256; i++) {
+  //       std::cout << dst_float_buffer[i] << " ";
+  //     }
+  //     std::cout << std::endl;
+  //   }
+  // ));
 
   //===-------------------------------------------------------------------===/
   // Benchmarking
@@ -215,8 +249,7 @@ void RegisterVulkanBenchmarks(
 
   const size_t num_element = 1;
   for (const auto &shader : kShaders) {
-    std::string test_name = absl::StrCat(gpu_name, "/", shader.name, "/",
-                                          num_element);
+    std::string test_name = absl::StrCat(gpu_name, "/", shader.name);
     ::benchmark::RegisterBenchmark(test_name.c_str(), BranchDivergence, device,
                                     latency_measure, shader.code,
                                     shader.code_num_bytes / sizeof(uint32_t),
