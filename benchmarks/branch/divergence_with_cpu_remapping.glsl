@@ -3,7 +3,7 @@
 #extension GL_EXT_scalar_block_layout : enable
 #extension GL_AMD_gpu_shader_half_float: enable
 
-layout (local_size_x = 256) in;
+layout (local_size_x = 1024) in;
 
 layout (set = 0, binding = 1) buffer Input {
     float input_array[]; 
@@ -18,7 +18,9 @@ void main() {
   float cond = input_array[index];
   results[index] = 0;
   float op = results[index]; 
+// -----------
 
+//------------
   if ( cond >= -12) {
     op = (op + 15.f);
     op = (op * op);

@@ -81,8 +81,9 @@ static void BranchDivergence(::benchmark::State &state,
   //===-------------------------------------------------------------------===/
   // Create buffers
   //===-------------------------------------------------------------------===/
-  const size_t input_size = num_element * 256 * sizeof(float);
-  const size_t dst_size = num_element * 256 * sizeof(float);
+  const int size = 1024;
+  const size_t input_size = num_element * size * sizeof(float);
+  const size_t dst_size = num_element * size * sizeof(float);
 
   BM_CHECK_OK_AND_ASSIGN(
     auto input_buffer,
@@ -103,7 +104,7 @@ static void BranchDivergence(::benchmark::State &state,
   BM_CHECK_OK(::uvkc::benchmark::SetDeviceBufferViaStagingBuffer(
     device, input_buffer.get(), input_size, [&](void *ptr, size_t num_bytes) {
       float *input_float_buffer = reinterpret_cast<float *>(ptr);
-      for (size_t i = 0; i < 256; i++ ) {
+      for (size_t i = 0; i < size; i++ ) {
         input_float_buffer[i] = rand() % 30;
       }
     }));
