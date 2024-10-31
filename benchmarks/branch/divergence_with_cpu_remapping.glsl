@@ -19,7 +19,7 @@ float rand(vec2 co) {
 }
 
 void main() {
-	uint index = gl_GlobalInvocationID.x;
+	uint index = gl_NumSubgroups * gl_SubgroupSize + gl_SubgroupID;
 
   float cond = inputA.input_array[index];
 	outputA.results[index] = 0;
@@ -30,8 +30,10 @@ void main() {
 
   if ( cond >= -12) {
     op = rand(seed);
+    op += 1;
   } else {
     op = rand(seed * 1.3) + 0.14;
+    op *= 1.4;
   }
 
   outputA.results[index] = op;
