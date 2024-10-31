@@ -81,9 +81,9 @@ static void BranchDivergence(::benchmark::State &state,
   //===-------------------------------------------------------------------===/
   // Create buffers
   //===-------------------------------------------------------------------===/
-  const int size = 1024;
-  const size_t input_size = num_element * size * sizeof(float);
-  const size_t dst_size = num_element * size * sizeof(float);
+  const size_t input_size = num_element  * sizeof(float);
+  const size_t dst_size = num_element * sizeof(float);
+  // TODO 你实际上还需要尝试将subgroup融入进去！
 
   BM_CHECK_OK_AND_ASSIGN(
     auto input_buffer,
@@ -104,7 +104,7 @@ static void BranchDivergence(::benchmark::State &state,
   BM_CHECK_OK(::uvkc::benchmark::SetDeviceBufferViaStagingBuffer(
     device, input_buffer.get(), input_size, [&](void *ptr, size_t num_bytes) {
       float *input_float_buffer = reinterpret_cast<float *>(ptr);
-      for (size_t i = 0; i < size; i++ ) {
+      for (size_t i = 0; i < num_element; i++ ) {
         input_float_buffer[i] = rand() % 30;
       }
     }));
@@ -134,7 +134,7 @@ static void BranchDivergence(::benchmark::State &state,
   BM_CHECK_OK(dispatch_cmdbuf->Begin());
   dispatch_cmdbuf->BindPipelineAndDescriptorSets(
       *pipeline, {bound_descriptor_sets.data(), bound_descriptor_sets.size()});
-  dispatch_cmdbuf->Dispatch(num_element, 1, 1);
+  dispatch_cmdbuf->Dispatch(num_element / 32 , 1, 1);
   BM_CHECK_OK(dispatch_cmdbuf->End());
   BM_CHECK_OK(device->QueueSubmitAndWait(*dispatch_cmdbuf));
 
@@ -191,7 +191,7 @@ static void BranchDivergence(::benchmark::State &state,
       cmdbuf->WriteTimestamp(*query_pool, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0);
     }
 
-    cmdbuf->Dispatch(num_element , 1, 1);
+    cmdbuf->Dispatch(num_element / 32, 1, 1);
 
     if (use_timestamp) {
       cmdbuf->WriteTimestamp(*query_pool, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
@@ -249,7 +249,7 @@ void RegisterVulkanBenchmarks(
     vulkan::Device *device, const LatencyMeasure *latency_measure) {
   const char *gpu_name = physical_device.v10_properties.deviceName;
 
-  const size_t num_element = 1;
+  const size_t num_element = 1024 * 1024;
   VkPhysicalDeviceProperties deviceProperties;
   vkGetPhysicalDeviceProperties(physical_device.handle, &deviceProperties);
   if (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)

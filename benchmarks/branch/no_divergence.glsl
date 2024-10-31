@@ -2,8 +2,9 @@
 #pragma use_vulkan_memory_model
 #extension GL_EXT_scalar_block_layout : enable
 #extension GL_AMD_gpu_shader_half_float: enable
+#extension GL_KHR_shader_subgroup_basic: enable
 
-layout (local_size_x = 1024) in;
+layout (local_size_x = 32) in;
 
 layout (set = 0, binding = 1) buffer Input {
     float input_array[]; 
