@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <vulkan/vulkan_core.h>
+#include <functional>
 #include <chrono>
 #include <memory>
 #include <numeric>
@@ -20,16 +20,16 @@
 #include "absl/strings/str_cat.h"
 #include "absl/types/span.h"
 #include "benchmark/benchmark.h"
-#include "uvkc/benchmark/data_type_util.h"
+#include "benchmarks/memory/copy_storage_buffer.h"
 #include "uvkc/benchmark/main.h"
 #include "uvkc/benchmark/status_util.h"
 #include "uvkc/benchmark/vulkan_buffer_util.h"
 #include "uvkc/benchmark/vulkan_context.h"
 #include "uvkc/vulkan/device.h"
 #include "uvkc/vulkan/pipeline.h"
+#include "uvkc/vulkan/timestamp_query_pool.h"
 
 using ::uvkc::benchmark::LatencyMeasureMode;
-using namespace uvkc::benchmark;
 
 static const char kBenchmarkName[] = "branch_divergence";
 
@@ -88,7 +88,7 @@ static void BranchDivergence(::benchmark::State &state,
   BM_CHECK_OK_AND_ASSIGN(
     auto input_buffer,
     device->CreateBuffer(
-      VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+      VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
       VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, input_size));
 
   BM_CHECK_OK_AND_ASSIGN(
@@ -109,13 +109,22 @@ static void BranchDivergence(::benchmark::State &state,
       }
     }));
 
+  BM_CHECK_OK(::uvkc::benchmark::SetDeviceBufferViaStagingBuffer(
+    device, dst_buffer.get(), dst_size, [&](void *ptr, size_t num_bytes) {
+      float *dst_float_buffer = reinterpret_cast<float *>(ptr);
+      for (size_t i = 0; i < num_element; i++) {
+        dst_float_buffer[i] = 0;
+      }
+    } 
+  ));
+
   //===-------------------------------------------------------------------===/
   // Dispatch
   //===-------------------------------------------------------------------===/
 
   std::vector<::uvkc::vulkan::Device::BoundBuffer> bound_buffers = {
-      {dst_buffer.get(), /*set=*/0, /*binding=*/0},
-      {input_buffer.get(), 0, 1}
+      {input_buffer.get(), /*set=*/0, /*binding=*/0},
+      {dst_buffer.get(), /*set=*/0, /*binding=*/1},
   };
   BM_CHECK_OK(device->AttachBufferToDescriptor(
       *shader_module, layout_set_map,
@@ -191,7 +200,7 @@ static void BranchDivergence(::benchmark::State &state,
       cmdbuf->WriteTimestamp(*query_pool, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0);
     }
 
-    cmdbuf->Dispatch(num_element / 32, 1, 1);
+    cmdbuf->Dispatch(num_element / 32 , 1, 1);
 
     if (use_timestamp) {
       cmdbuf->WriteTimestamp(*query_pool, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
@@ -233,6 +242,7 @@ static void BranchDivergence(::benchmark::State &state,
 
 namespace uvkc {
 namespace benchmark {
+static const size_t num_element = 1024 * 1024;
 
 absl::StatusOr<std::unique_ptr<VulkanContext>> CreateVulkanContext() {
   return CreateDefaultVulkanContext(kBenchmarkName);
@@ -241,7 +251,12 @@ absl::StatusOr<std::unique_ptr<VulkanContext>> CreateVulkanContext() {
 bool RegisterVulkanOverheadBenchmark(
     const vulkan::Driver::PhysicalDeviceInfo &physical_device,
     vulkan::Device *device, double *overhead_seconds) {
-  return false;
+  memory::RegisterCopyStorageBufferBenchmark(
+      physical_device.v10_properties.deviceName, device,
+      num_element * sizeof(float), memory::GetShaderCodeCases().front(),
+      LatencyMeasureMode::kSystemSubmit,
+      /*overhead_seconds=*/0, overhead_seconds);
+  return true;
 }
 
 void RegisterVulkanBenchmarks(
@@ -249,13 +264,6 @@ void RegisterVulkanBenchmarks(
     vulkan::Device *device, const LatencyMeasure *latency_measure) {
   const char *gpu_name = physical_device.v10_properties.deviceName;
 
-  const size_t num_element = 1024 * 1024;
-  VkPhysicalDeviceProperties deviceProperties;
-  vkGetPhysicalDeviceProperties(physical_device.handle, &deviceProperties);
-  if (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
-    std::cout << "GPU ENABLED" << std::endl;
-  else 
-    std::cout << "GPU NOT ENABLED" << std::endl;
   for (const auto &shader : kShaders) {
     std::string test_name = absl::StrCat(gpu_name, "/", shader.name);
     ::benchmark::RegisterBenchmark(test_name.c_str(), BranchDivergence, device,
@@ -263,7 +271,7 @@ void RegisterVulkanBenchmarks(
                                     shader.code_num_bytes / sizeof(uint32_t),
                                     num_element)
         ->UseManualTime()
-        ->Unit(::benchmark::kNanosecond);
+        ->Unit(::benchmark::kMicrosecond);
   }
 }
 
